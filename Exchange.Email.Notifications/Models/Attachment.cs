@@ -8,7 +8,8 @@ namespace Exchange.Email.Notifications.Models
 {
     public class Attachment
     {
+        public string Id { get; set; }
         public string Filename { get; set; }
-        public byte[] Content { get; set; }
+        public int Size { get; set; }
     }
 }

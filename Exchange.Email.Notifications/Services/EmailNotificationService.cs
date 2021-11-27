@@ -1,4 +1,5 @@
-﻿using Exchange.Email.Notifications.Models;
+﻿using Exchange.Email.Notifications.Exceptions;
+using Exchange.Email.Notifications.Models;
 using Exchange.Email.Notifications.Options;
 using Microsoft.Exchange.WebServices.Data;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ namespace Exchange.Email.Notifications.Services
         readonly ILogger<Worker> _logger;
         readonly ExchangeConfiguration _exchangeConfiguration;
         readonly ExchangeService _exchangeService;
+        readonly IDictionary<String, Folder> _folders;
 
         public EmailNotificationService(
             ILogger<Worker> logger,
@@ -34,21 +36,37 @@ namespace Exchange.Email.Notifications.Services
                                 password: _exchangeConfiguration.Password),
                 Url = _exchangeConfiguration.Url
             };
+            var folders = new Dictionary<String, Folder>();
+
+            if (_exchangeConfiguration.Folders == null && _exchangeConfiguration.Folders.Any())
+                folders.Add(Enum.GetName(typeof(WellKnownFolderName), WellKnownFolderName.Inbox), Folder.Bind(_exchangeService, WellKnownFolderName.Inbox));
+            else
+            {
+                foreach (var folder in _exchangeConfiguration.Folders)
+                {
+                    Folder currentFolder = Folder.Bind(_exchangeService, WellKnownFolderName.MsgFolderRoot);
+                    var path = folder.Split('/');
+                    foreach (var segment in path)
+                    {
+                        currentFolder = currentFolder.FindFolders(new SearchFilter.IsEqualTo(FolderSchema.DisplayName, segment), new FolderView(1)).AsEnumerable().SingleOrDefault();
+                        if (currentFolder == null)
+                            throw new FolderNotFoundException();
+                    }
+
+                    folders.Add(folder, currentFolder);
+                }
+
+                _folders = folders;
+            }
+
             AddNewMailSunbscription();
         }
 
 
         void AddNewMailSunbscription()
         {
-            Folder rootfolder = Folder.Bind(_exchangeService, WellKnownFolderName.MsgFolderRoot);
-            var folders = rootfolder.FindFolders(new FolderView(400)).AsEnumerable()
-                .Where(f => f.DisplayName.Equals("NOR", StringComparison.InvariantCultureIgnoreCase))
-                .ToArray();
-
-
             var StreamingSubscription = _exchangeService.SubscribeToStreamingNotifications(
-                //folderIds: new FolderId[] { WellKnownFolderName.Inbox },
-                folderIds: folders.Select(f => f.Id),
+                folderIds: _folders.Select(f => f.Value.Id),
                 EventType.NewMail
                 );
             StreamingSubscriptionConnection connection = new StreamingSubscriptionConnection(_exchangeService, 30);
@@ -75,32 +93,26 @@ namespace Exchange.Email.Notifications.Services
                     Folder folder = Folder.Bind(_exchangeService, message.ParentFolderId);
                     var eventModel = new NewEmailMessageModel()
                     {
+                        Id = message.Id.UniqueId,
                         Subject = message.Subject,
-                        Folder = folder.DisplayName
+                        From = message.From.Address,
+                        DateTimeSent = message.DateTimeSent,
+                        Attachments = message.Attachments.Where(a => a is FileAttachment).Select(a => a.Name).ToArray()
                     };
 
-                    //var recepients = message.ToRecipients.AsEnumerable()
-                    //                    .Where(r => r.Address.EndsWith(_exchangeConfiguration.Username, StringComparison.InvariantCultureIgnoreCase))
-                    //                    .ToArray();
-
-                    //if (!recepients.Any())
-                    //    continue;
-
-                    //TODO: Calculate the TLA
-
-                    var fileAttachemnts = message.Attachments.Where(a => a is FileAttachment);
-                    foreach (FileAttachment fileAttachemnt in fileAttachemnts)
-                    {
-                        using (var contentStream = new MemoryStream())
-                        {
-                            fileAttachemnt.Load(contentStream);
-                            File.WriteAllBytes(Path.Combine(@"C:\Temp\attachemnts\", fileAttachemnt.Name), contentStream.ToArray());
-                        }
-                    }
-
                     if (this.OnNewEmailReceived != null)
-                        OnNewEmailReceived(this, new NewEmailMessageModel() { Subject = "Test" });
+                        OnNewEmailReceived(this, eventModel);
 
+
+                    //var fileAttachemnts = message.Attachments.Where(a => a is FileAttachment);
+                    //foreach (FileAttachment fileAttachemnt in fileAttachemnts)
+                    //{
+                    //    using (var contentStream = new MemoryStream())
+                    //    {
+                    //        fileAttachemnt.Load(contentStream);
+                    //        File.WriteAllBytes(Path.Combine(@"C:\Temp\attachemnts\", fileAttachemnt.Name), contentStream.ToArray());
+                    //    }
+                    //}
 
                 }
             }
