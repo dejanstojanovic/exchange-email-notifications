@@ -1,6 +1,7 @@
 using Exchange.Email.Notifications.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Threading;
 using Threading = System.Threading.Tasks;
 
@@ -9,21 +10,31 @@ namespace Exchange.Email.Notifications
     public class Worker : BackgroundService
     {
         readonly ILogger<Worker> _logger;
-        readonly IEmailNotificationService _emailNotificationService;
+        readonly IEmailService _emailService;
 
         public Worker(
             ILogger<Worker> logger, 
-            IEmailNotificationService emailNotificationService)
+            IEmailService emailService)
         {
             _logger = logger;
-            _emailNotificationService = emailNotificationService;
+            _emailService = emailService;
 
-            _emailNotificationService.OnNewEmailReceived += OnNewEmailReceived;
+            _emailService.OnNewEmailReceived += OnNewEmailReceived;
         }
 
         private void OnNewEmailReceived(object sender, Models.NewEmailMessageModel e)
         {
-            
+            _logger.LogInformation("Message received");
+            var fullMessage = _emailService.GetEmailMessage(e.Id);
+
+            if (e.Attachments != null && e.Attachments.Any()) {
+                foreach (var messageAttachment in e.Attachments)
+                {
+                    var attachment = _emailService.GetAttachment(messageAttachment.Id);
+                }
+            }
+
+            _emailService.MarkAsRead(e.Id);
         }
        
 

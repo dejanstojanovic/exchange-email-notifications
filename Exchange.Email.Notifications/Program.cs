@@ -17,6 +17,7 @@ namespace Exchange.Email.Notifications
                 {
                     services.AddHostedService<Worker>();
                     services.AddExchangeEmailNotifications(hostContext.Configuration);
+                    services.AddAutoMapper(typeof(Program).Assembly);
                 });
     }
 }

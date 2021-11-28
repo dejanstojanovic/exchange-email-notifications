@@ -16,7 +16,7 @@ namespace Exchange.Email.Notifications.Extensions
         public static void AddExchangeEmailNotifications(this IServiceCollection services, IConfiguration configuration) 
         {
             services.Configure<ExchangeConfiguration>(configuration.GetSection("Exchange"));
-            services.AddSingleton<IEmailNotificationService, EmailNotificationService>();
+            services.AddSingleton<IEmailService, EmailService>();
         }
     }
 }

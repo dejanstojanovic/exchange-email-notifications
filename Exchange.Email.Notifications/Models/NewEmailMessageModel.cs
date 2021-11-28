@@ -12,6 +12,6 @@ namespace Exchange.Email.Notifications.Models
 
         public DateTime DateTimeSent { get; set; }
 
-        public IEnumerable<String> Attachments { get; set; }
+        public IEnumerable<EmailMessageAttachmentModel> Attachments { get; set; }
     }
 }
